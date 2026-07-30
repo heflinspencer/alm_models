@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
+from src.yield_curve import YieldCurve
 
 class Instrument(ABC):
     """
@@ -55,4 +56,65 @@ class RetailMortgage(Instrument):
         for t in range(1, periods + 1):
             cash_flows[float(t)] = annuity_payment
         
+        return cash_flows
+    
+class FixedRateBond(Instrument):
+    """
+    A fixed income instrument paying semi-annual coupons and returning principal at maturity.
+    """
+    def get_cash_flows(self) -> dict[float, float]:
+        periods = int(np.floor(self.maturity * 2))
+        cash_flows = {}
+
+        if periods <=0:
+            return {self.maturity: self.notional}
+            
+        coupon_payment = self.notional * (self.rate / 2.0)
+
+        for p in range(1, periods):
+            # Time t increases in 0.5 year increments
+            t = p * 0.5
+            cash_flows[t] = coupon_payment
+
+        # Final period pays the last coupon plus the principal
+        final_t  = periods * 0.5
+        cash_flows[final_t] = coupon_payment + self.notional
+
+        return cash_flows
+        
+class FloatingRateNote(Instrument):
+    """
+    A floating rate note paying a coupon linked to implied forward rate plus a spread.
+    """
+    def __init__(self, notional: float, spread: float, maturity: float, curve: YieldCurve):
+        # I store the spread in the 'rate' attribute of the base class
+        super().__init__(notional, spread, maturity)
+        self.curve = curve
+
+    def get_cash_flows(self) -> dict[float, float]:
+        periods = int(np.floor(self.maturity * 4))
+        cash_flows = {}
+        if periods <= 0:
+            return {self.maturity: self.notional}
+        
+        for p in range(1, periods +1):
+            t = p * 0.25
+            t_prev = (p - 1) * 0.25
+
+            # Implied forward rate for 3-month period
+            df_prev = self.curve.get_discount_factor(t_prev)
+            df_curr = self.curve.get_discount_factor(t)
+            forward_rate_qtr = (df_prev / df_curr) - 1.0
+
+            # Divide the annualised spread by 4 for the quarterly payment
+            quarterly_spread = self.rate / 4.0
+
+            # Quarterly Coupon = Notional * (Quarterly Forward Rate + Quarterly Spread)
+            coupon = self.notional * (forward_rate_qtr + quarterly_spread)
+
+            if p == periods:
+                cash_flows[t] = coupon + self.notional
+            else:
+                cash_flows[t] = coupon
+
         return cash_flows
