@@ -5,6 +5,7 @@ from src.yield_curve import YieldCurve
 from src.instruments import FixedRateBond, FloatingRateNote
 from src.instruments import NonMaturingDeposit
 from src.instruments import InterestRateSwap
+from src.instruments import RepurchaseAgreement
 
 def test_term_deposit_cash_flows():
     # A 100k deposit at 5% for 2 years
@@ -114,4 +115,25 @@ def test_interest_rate_swap_cash_flows():
 
     # Prove there is no 1M principal exchange at maturity
     assert cfs[2.0] < 100000.0
+
+def test_repurchase_agreement_cash_flows():
+    # A 50M 7-day Repo at 4.5%
+    # Maturity in years = 7 / 365 = 0.019178...
+    repo_maturity = 7.0 / 365.0
+    repo = RepurchaseAgreement(
+        notional=-50000000.0,
+        rate=0.045,
+        maturity=repo_maturity,
+        collateral_id="UK_GILT_10Y" 
+    )
+
+    cfs = repo.get_cash_flows()
+
+    assert len(cfs) == 1
+    assert repo_maturity in cfs
+
+    # Expected simple interest payoff: -50,000,000 * (1 + 0.045 * (7/365))
+    expected_payoff = -50000000.0 * (1.0 + (0.045 * repo_maturity))
+    
+    assert np.isclose(cfs[repo_maturity], expected_payoff)
 

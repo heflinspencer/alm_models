@@ -207,4 +207,23 @@ class InterestRateSwap(Instrument):
             cash_flows[t] = net_cf
         
         return cash_flows
+    
+class RepurchaseAgreement(Instrument):
+    """
+    A short-term secured borrowing/lending instrument (Repo / Reverse Repo).
+    Utilises simple money-market interest rather than compounded interest.
+    """
+    def __init__(self, notional: float, rate: float, maturity: float, collateral_id: str = "GENERIC_BOND"):
+        super().__init__(notional, rate, maturity)
+        self.collateral_id = collateral_id
+
+    def get_cash_flows(self) -> dict[float, float]:
+        if self.maturity <= 0:
+            return {0.0: self.notional}
+        
+        # Money market simple interest formulation
+        # e.g., Notional * (1 + rate * (days/365))
+        payoff = self.notional * (1.0 + (self.rate * self.maturity))
+
+        return {self.maturity: payoff}
      
