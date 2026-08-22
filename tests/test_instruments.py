@@ -3,6 +3,7 @@ import numpy as np
 from src.instruments import TermDeposit, RetailMortgage
 from src.yield_curve import YieldCurve
 from src.instruments import FixedRateBond, FloatingRateNote
+from src.instruments import NonMaturingDeposit
 
 def test_term_deposit_cash_flows():
     # A 100k deposit at 5% for 2 years
@@ -63,5 +64,22 @@ def test_floating_rate_note_cash_flows():
 
     assert np.isclose(cfs[0.25], expected_coupon)
     assert np.isclose(cfs[3.0], expected_coupon +1000000.0)
+
+def test_non_maturing_deposit_cash_flows():
+    #100k checking account paying 1% interest
+    # Modeled with a 20% annual decay rate over a 3-year horizon
+    nmd = NonMaturingDeposit(notional=-100000.0, rate=0.01, max_maturity=3.0, decay_rate=0.20)
+    cfs = nmd.get_cash_flows()
+
+    assert len(cfs) == 3
+
+    # Year 1: Interest = -100k * 1% = -1k. Runoff = -100k * 20% = -20k. Total = -21k
+    assert np.isclose(cfs[1.0], -21000.0)
+
+    # Year 2: Remaining bal = -80k. Interest = -800. Runoff = -16k. Total = -16.8k
+    assert np.isclose(cfs[2.0], -16800)
+
+    # Year 3 (Final): Remaining bal = -64k. Interest = -640. Runoff = -64k. Total = 64.64k
+    assert np.isclose(cfs[3.0], -64640.0)
 
 

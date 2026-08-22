@@ -118,3 +118,42 @@ class FloatingRateNote(Instrument):
                 cash_flows[t] = coupon
 
         return cash_flows
+    
+class NonMaturingDeposit(Instrument):
+    """
+    A liability product with no contractual maturity (e.g. Checking Account).
+    Cash flows are modeled using a behavioural assumption of annual runoff (decay rate)
+    up to a maximum modeling horizon.
+    """
+    def __init__(self, notional: float, rate: float, max_maturity: float, decay_rate: float):
+        # Interpret max_maturity as the modeling horizon (e.g., cut off after 10 years)
+        super().__init__(notional, rate, max_maturity)
+        self.decay_rate = decay_rate
+    
+    def get_cash_flows(self) -> dict[float, float]:
+        periods = int(np.floor(self.maturity))
+        cash_flows = {}
+
+        if periods  <= 0:
+            return {self.maturity: self.notional}
+        
+        remaining_balance = self.notional
+
+        for t in range(1, periods + 1):
+            # Calculate interest paid on the remaining balance
+            interest_payment = remaining_balance * self.rate
+
+            # Calculate the principal runoff for this period
+            if t == periods:
+                # At the end of the modeling horizon, all remaining balances run off
+                principal_runoff = remaining_balance
+            else:
+                principal_runoff = remaining_balance * self.decay_rate
+
+            # Total cash flow is the runoff plus interest
+            cash_flows[float(t)] = principal_runoff + interest_payment
+
+            # Reduce the balance for the next period
+            remaining_balance -= principal_runoff
+        
+        return cash_flows
