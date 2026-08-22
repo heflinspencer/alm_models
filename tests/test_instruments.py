@@ -6,6 +6,7 @@ from src.instruments import FixedRateBond, FloatingRateNote
 from src.instruments import NonMaturingDeposit
 from src.instruments import InterestRateSwap
 from src.instruments import RepurchaseAgreement
+from src.instruments import RevolvingCredit
 
 def test_term_deposit_cash_flows():
     # A 100k deposit at 5% for 2 years
@@ -136,4 +137,43 @@ def test_repurchase_agreement_cash_flows():
     expected_payoff = -50000000.0 * (1.0 + (0.045 * repo_maturity))
     
     assert np.isclose(cfs[repo_maturity], expected_payoff)
+
+def test_revolving_credit_cash_flows():
+    # 10k limit, 5k drawn initially, 15% APR.
+    # Customers pay down 30% of their balance annually, and draw 10% of their open limit.
+    # Modeled over a 3-year horizon
+    rev = RevolvingCredit(
+        drawn_amount=5000.0,
+        limit=10000.0,
+        rate=0.15,
+        max_maturity=3.0,
+        repayment_rate=0.30,
+        drawdown_rate=0.10
+    )
+    cfs = rev.get_cash_flows()
+
+    assert len(cfs) == 3
+
+    # Year 1 Math:
+    # Interest = 5000 * 0.15 = 750
+    # Principal Repaid = 5000 * 0.30 = 1500
+    # Undrawn = 10000 - 5000 = 5000. New Draw = 5000 * 0.10 = 500 (Outflow)
+    # Net CF = 750 + 1500 -500 = 1750
+    # End Balance = 5000 -1500 + 500 = 4000
+    assert np.isclose(cfs[1.0], 1750.0)
+
+    # Year 2 Math:
+    # Interest = 4000 * 0.15 = 600
+    # Principal Repaid = 4000 * 0.30 = 1200
+    # Undrawn = 10000 - 4000 = 6000. New Draw = 6000 * 0.10 = 600 (Outflow)
+    # Net CF = 600 + 1200 - 600 = 1200
+    # End Balance = 4000 - 1200 + 600 = 3400
+    assert np.isclose(cfs[2.0], 1200.0)
+
+    # Year 3 (Final) Math:
+    # Interest = 3400 * 0.15 = 510
+    # Principal Repaid = 3400
+    # New Draw = 0 (horizon ends)
+    # Net CF = 510 +3400 = 3910
+    assert np.isclose(cfs[3.0], 3910.0)
 

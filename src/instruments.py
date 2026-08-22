@@ -226,4 +226,50 @@ class RepurchaseAgreement(Instrument):
         payoff = self.notional * (1.0 + (self.rate * self.maturity))
 
         return {self.maturity: payoff}
+    
+class RevolvingCredit(Instrument):
+    """
+    A retail or corporate revolving credit facility (e.g Credit Card) with 
+    behavioural repayment and drawdown assumptions over a modeling horizon.
+    """
+    def __init__(self, drawn_amount: float, limit: float, rate: float,
+                 max_maturity: float, repayment_rate: float, drawdown_rate: float):
+        # The drawn amount acts as the initial notional for the base class
+        super().__init__(drawn_amount, rate, max_maturity)
+        self.limit = limit
+        self.repayment_rate = repayment_rate
+        self.drawdown_rate = drawdown_rate
+    
+    def get_cash_flows(self) -> dict[float, float]:
+        periods = int(np.floor(self.maturity))
+        cash_flows = {}
+
+        if periods <= 0:
+            return {self.maturity: self.notional}
+        
+        current_drawn = self.notional
+
+        for t in range(1, periods +1):
+            # 1. Interest paid by the customer on the drawn balance
+            interest_cf = current_drawn * self.rate
+
+            if t == periods:
+                # At the end of the modeling horizon, I assume the remaining balance is paid off
+                principal_cf = current_drawn
+                new_drawdowns = 0.0
+            else:
+                # 2. Principal repaid behaviourally
+                principal_cf = current_drawn * self.repayment_rate
+
+                # 3. New drawdowns on the undrawn portion
+                undrawn = max(self.limit - current_drawn, 0.0)
+                new_drawdowns = undrawn * self.drawdown_rate
+
+            # Net Cash Flow = Interest Received + Principal Repaid - New Money Lent
+            cash_flows[float(t)] = interest_cf + principal_cf - new_drawdowns
+
+            # Update the drawn balance for the new period
+            current_drawn = current_drawn - principal_cf + new_drawdowns
+
+        return cash_flows 
      
