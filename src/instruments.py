@@ -157,3 +157,54 @@ class NonMaturingDeposit(Instrument):
             remaining_balance -= principal_runoff
         
         return cash_flows
+    
+class InterestRateSwap(Instrument):
+    """
+    An Interest Rate Swap (IRS) exchanging fixed rate payments for floating rate payments.
+    Crucially, standard IRS do NOT exchange principal at maturity.
+    """
+    def __init__(self, notional: float, fixed_rate: float, float_spread: float,
+                 maturity: float, curve: YieldCurve, is_payer: bool = True):
+        # I store the fixed rate in the base class 'rate' attribute
+        super().__init__(notional, fixed_rate, maturity)
+        self.float_spread = float_spread
+        self.curve = curve
+        self.is_payer = is_payer # True = Pay Fixed/Rec Float. False = Rec Fixed/Pay Float
+
+    def get_cash_flows(self) -> dict[float, float]:
+        # Step through time in quarters (the highest frequency leg)
+        periods_quarterly = int(np.floor(self.maturity * 4))
+        cash_flows = {}
+
+        if periods_quarterly <= 0:
+            return {}
+        
+        for p in range(1, periods_quarterly + 1):
+            t = p * 0.25
+            t_prev = (p - 1) * 0.25
+
+            # 1. Floating Leg (Quarterly)
+            df_prev = self.curve.get_discount_factor(t_prev)
+            df_curr = self.curve.get_discount_factor(t)
+            forward_rate_qtr = (df_prev / df_curr) - 1.0
+            quarterly_spread = self.float_spread / 4.0
+            float_cf = self.notional * (forward_rate_qtr + quarterly_spread)
+
+            # 2. Fixed Leg (Semi-annual - only occurs on even quarters)
+            fixed_cf = 0.0
+            is_semi_annual_date = (p % 2 == 0)
+            if is_semi_annual_date:
+                fixed_cf = self.notional * (self.rate / 2.0)
+
+            # 3. Netting
+            if self.is_payer:
+                # Pay Fixed(negative), Receive Float(positive)
+                net_cf = float_cf - fixed_cf
+            else:
+                # Receive Fixed (positive), Pay Float (negative)
+                net_cf = fixed_cf - float_cf
+            
+            cash_flows[t] = net_cf
+        
+        return cash_flows
+     

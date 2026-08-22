@@ -4,6 +4,7 @@ from src.instruments import TermDeposit, RetailMortgage
 from src.yield_curve import YieldCurve
 from src.instruments import FixedRateBond, FloatingRateNote
 from src.instruments import NonMaturingDeposit
+from src.instruments import InterestRateSwap
 
 def test_term_deposit_cash_flows():
     # A 100k deposit at 5% for 2 years
@@ -82,4 +83,35 @@ def test_non_maturing_deposit_cash_flows():
     # Year 3 (Final): Remaining bal = -64k. Interest = -640. Runoff = -64k. Total = 64.64k
     assert np.isclose(cfs[3.0], -64640.0)
 
+def test_interest_rate_swap_cash_flows():
+    # Flat continuous yield curve at 5%
+    curve = YieldCurve(tenors=[0.0, 5.0], rates=[0.05, 0.05])
+
+    # Payer Swap: Pay 5% fixed (Semi-Annual), Rec Float + 0 spread (Quarterly), 2 years, 1M notional
+    irs = InterestRateSwap(
+        notional=1000000.0,
+        fixed_rate=0.05,
+        float_spread=0.0,
+        maturity=2.0,
+        curve=curve,
+        is_payer=True
+    )
+
+    cfs = irs.get_cash_flows()
+
+    # 2 years * 4 quarters = 8 cash flow dates
+    assert len(cfs) == 8
+
+    expected_fwd_qtr = np.exp(0.05 * 0.25) - 1.0
+    expected_float_cf = 1000000.0 * expected_fwd_qtr
+    expected_fixed_semi_cf = 1000000.0 * (0.05 / 2.0)
+
+    # Quarter 1 (0.25): Float only. (Bank receives float, pays no fixed)
+    assert np.isclose(cfs[0.25], expected_float_cf)
+
+    # Quarter 2 (0.50): Net cash flow. (Bank receives float, pays semi-annual fixed)
+    assert np.isclose(cfs[0.5], expected_float_cf - expected_fixed_semi_cf)
+
+    # Prove there is no 1M principal exchange at maturity
+    assert cfs[2.0] < 100000.0
 
