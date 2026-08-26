@@ -1,12 +1,12 @@
 import pytest
 import numpy as np
-from src.instruments import TermDeposit, RetailMortgage
-from src.yield_curve import YieldCurve
-from src.instruments import FixedRateBond, FloatingRateNote
-from src.instruments import NonMaturingDeposit
-from src.instruments import InterestRateSwap
-from src.instruments import RepurchaseAgreement
-from src.instruments import RevolvingCredit
+from src.alm_engine.instruments import TermDeposit, RetailMortgage
+from src.alm_engine.yield_curve import YieldCurve
+from src.alm_engine.instruments import FixedRateBond, FloatingRateNote
+from src.alm_engine.instruments import NonMaturingDeposit
+from src.alm_engine.instruments import InterestRateSwap
+from src.alm_engine.instruments import RepurchaseAgreement
+from src.alm_engine.instruments import RevolvingCredit
 
 def test_term_deposit_cash_flows():
     # A 100k deposit at 5% for 2 years

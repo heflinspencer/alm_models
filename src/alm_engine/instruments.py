@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
-from src.yield_curve import YieldCurve
+from src.alm_engine.yield_curve import YieldCurve
 
 class Instrument(ABC):
     """

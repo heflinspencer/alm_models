@@ -1,8 +1,8 @@
 import pytest
 import numpy as np
-from src.yield_curve import YieldCurve
-from src.instruments import TermDeposit, FixedRateBond
-from src.engine import ALMEngine
+from src.alm_engine.yield_curve import YieldCurve
+from src.alm_engine.instruments import TermDeposit, FixedRateBond
+from src.alm_engine.engine import ALMEngine
 
 def test_alm_engine_eve_calculation():
     # Flat 3% curve

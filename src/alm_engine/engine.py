@@ -1,6 +1,6 @@
 import numpy as np
-from src.yield_curve import YieldCurve
-from src.instruments import Instrument
+from src.alm_engine.yield_curve import YieldCurve
+from src.alm_engine.instruments import Instrument
 
 class ALMEngine:
     """

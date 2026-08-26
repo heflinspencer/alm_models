@@ -1,6 +1,6 @@
 import pytest
 import numpy as np
-from src.yield_curve import YieldCurve
+from src.alm_engine.yield_curve import YieldCurve
 
 def test_yield_curve_discount_factor():
     # Set up a simple flat yield curve at 5%
