@@ -24,6 +24,4 @@ def test_empirical_base_cpr_pipeline():
     # Expected CPR = 1 - (1 - 0.004)^12 = 4.7%
     expected_cpr = 1.0 - (1.0 -0.004)**12
 
-    assert np.isclose(empirical_cpr, expected_cpr, atol=0.005)
-
-    # Base monthly 
+    assert np.isclose(empirical_cpr, expected_cpr, atol=0.005) 

@@ -3,9 +3,9 @@ import pandas as pd
 
 class BaseCPRCalculator:
     """
-    Empirical Prepayment Calculator.
-    Derives loan-level SMM from servicing data and extracts baseline turnover (Base CPR)
-    by isolating cohorts with negative refinancing incentives.
+    Empirical Prepayment Calculator (Hybrid Edition).
+    Simulates servicing data with behavioral covariates (FICO, Burnout) to
+    support Machine Learning residual training.
     """
     def __init__(self, random_seed: int = 42):
         self.random_seed = random_seed
@@ -20,6 +20,10 @@ class BaseCPRCalculator:
         market_rates = np.random.uniform(0.02, 0.07, num_records)
         upb_beginning = np.random.uniform(100000, 500000, num_records)
 
+        # ML covariates
+        fico_scores = np.random.randint(600, 850, num_records)
+        burnout_indicator = np.random.choice([0, 1], p=[0.7, 0.3], size=num_records)
+
         # Exact amortization math
         n_months = 360
         monthly_rates = contractual_rates / 12.0
@@ -30,6 +34,7 @@ class BaseCPRCalculator:
 
         # Determine actual ending balance (simulating real-world borrower behavior)
         upb_ending = np.zeros(num_records)
+
         for i in range(num_records):
             expected_ending = upb_beginning[i] - scheduled_principals[i]
 
@@ -37,7 +42,18 @@ class BaseCPRCalculator:
             base_turnover_chance = 0.004
 
             # Massive spike if rates drop (refi boom)
-            total_prob = base_turnover_chance + 0.05 if incentive > 0.005 else base_turnover_chance
+            total_prob = base_turnover_chance
+
+            if incentive > 0.005:
+                # Inject the hidden reality for the ML to discover:
+                # High FICO borrowers prepay aggressively. Burned-out borrowers don't.
+                refi_spike = 0.05
+                if fico_scores[i] > 750:
+                    refi_spike += 0.03
+                if burnout_indicator[i] == 1:
+                    refi_spike -= 0.04
+                
+                total_prob = base_turnover_chance + max(0.0, refi_spike)
 
             if np.random.random() < total_prob:
                 upb_ending[i] = 0.0 # Loan fully paid off
@@ -50,7 +66,9 @@ class BaseCPRCalculator:
             "market_rate": market_rates,
             "upb_beginning": upb_beginning,
             "scheduled_principal": scheduled_principals,
-            "upb_ending": upb_ending
+            "upb_ending": upb_ending,
+            "fico": fico_scores,
+            "burnout": burnout_indicator
         })
     
     def calculate_loan_level_smm(self, tape: pd.DataFrame) -> pd.DataFrame:
@@ -72,6 +90,7 @@ class BaseCPRCalculator:
             unscheduled_principal / expected_ending_balance,
             0.0
         )
+        df['empirical_cpr'] = 1.0 - (1.0 - df['empirical_smm'])**12
 
         return df
     

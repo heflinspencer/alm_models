@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from src.alm_engine.yield_curve import YieldCurve
+from src.behavioral_models.prepayment_model import MortgagePrepaymentModel
 
 class Instrument(ABC):
     """
@@ -42,20 +43,69 @@ class RetailMortgage(Instrument):
     An asset product that pays fixed annual installments, amortising the principal
     down to zero over the maturity of the loan.
     """
-    def get_cash_flows(self) -> dict[float, float]:
-        periods = int(np.floor(self.maturity))
+    def __init__(self, notional: float, rate: float, maturity: float,
+                 prepayment_model: MortgagePrepaymentModel = None,
+                 fico: int = 700, burnout: int = 0):
+        """
+        :param fico: The borrower's credit score (affects refinancing efficiency).
+        :param burnout: 1 if the borrower has missed previous refi opportunities, 0 otherwise.
+        """
+        super().__init__(notional=notional, rate=rate, maturity=maturity)
+        self.prepayment_model = prepayment_model
+        self.fico = fico
+        self.burnout = burnout
 
+    def get_cash_flows(self, pricing_context: YieldCurve = None) -> dict[float, float]:
+        periods = int(np.floor(self.maturity))
+        
         if periods <= 0 or self.rate == 0.0:
             # Fallback for 0% rate or zero maturity
             return {self.maturity: self.notional}
         
         # The standard amortisation annuity formula
-        annuity_payment = self.notional * (self.rate * (1 + self.rate)**periods) / ((1 + self.rate)**periods - 1)
+        annuity = self.notional * (self.rate * (1 + self.rate)**periods) / ((1 + self.rate)**periods - 1)
 
         cash_flows = {}
+        remaining_balance = self.notional
+
+        # Pricing Context Queries
+        if pricing_context:
+            current_market_rate = pricing_context.get_rate(10.0)
+        else:
+            current_market_rate = self.rate
+
         for t in range(1, periods + 1):
-            cash_flows[float(t)] = annuity_payment
-        
+            if remaining_balance <= 0.001:
+                break
+
+            interest = remaining_balance * self.rate
+
+            if t == periods:
+                principal = remaining_balance
+            else:
+                contractual_principal = min(annuity - interest, remaining_balance)
+                if contractual_principal > remaining_balance:
+                    contractual_principal = remaining_balance
+                
+                prepayment = 0.0
+                if self.prepayment_model:
+                    # ML Injection: Pass the borrower's behavioral profile to the hybrid model
+                    cpr = self.prepayment_model.calculate_cpr(
+                        contractual_rate=self.rate,
+                        market_rate=current_market_rate,
+                        fico=self.fico,
+                        burnout=self.burnout
+                    )
+                    prepayment = (remaining_balance - contractual_principal) * cpr
+                
+                principal = min(contractual_principal + prepayment, remaining_balance)
+
+                if principal > remaining_balance:
+                    principal = remaining_balance
+
+            cash_flows[float(t)] = interest + principal
+            remaining_balance -= principal
+                
         return cash_flows
     
 class FixedRateBond(Instrument):
