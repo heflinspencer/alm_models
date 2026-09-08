@@ -33,13 +33,13 @@ flowchart LR
     %% 3. ALM Pricing Engine
     subgraph ALM [3. ALM Engine & Stress Testing]
         direction TB
-        YC>Regulatory Rate Shocks]:::data --> Mort[RetailMortgage]:::engine
+        YC[Regulatory Rate Shocks]:::data --> Mort[RetailMortgage]:::engine
         Hybrid -. "Passes ML CPR" .-> Mort
         YC --> Liab[Liabilities & NMDs]:::engine
         Mort & Liab --> AE[ALMEngine]:::engine
         AE --> EVE(((EVE Dashboard))):::output
     end
-    '''
+    ```
 
 
 1. The MRM-Compliant Anchor (Structural S-Curve)
