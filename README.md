@@ -1,4 +1,4 @@
-🏛️ Quantitative Architecture Summary
+# 🏛️ Quantitative Architecture Summary
 
 This repository implements a production-grade Asset Liability Management (ALM) engine designed to evaluate Interest Rate Risk in the Banking Book (IRRBB) through the lens of Economic Value of Equity (EVE).
 
@@ -39,63 +39,55 @@ flowchart LR
         Mort & Liab --> AE[ALMEngine]:::engine
         AE --> EVE(((EVE Dashboard))):::output
     end
-    
-    ```
+```
 
-
-1. The MRM-Compliant Anchor (Structural S-Curve)
+### 1. The MRM-Compliant Anchor (Structural S-Curve)
 
 Pure Machine Learning models (like raw XGBoost) extrapolate unpredictably under extreme regulatory stress shocks (e.g., +400 bps parallel shifts), often violating Model Risk Management (MRM) standards. To guarantee structural safety, this pipeline features a two-step calibrator:
+* **Empirical Extraction:** Derives assumption-free Single Monthly Mortality (SMM) and baseline Conditional Prepayment Rates (CPR) from raw, loan-level servicing tapes.
+* **Non-Linear Optimization:** Uses `scipy.optimize.curve_fit` to regress In-The-Money (ITM) cohorts into a Sigmoid S-Curve. This discovers the strict asymptotic bounds (Base CPR, Max CPR, and Steepness) driven purely by the macroeconomic interest rate incentive.
 
-    Empirical Extraction: Derives assumption-free Single Monthly Mortality (SMM) and baseline Conditional Prepayment Rates (CPR) from raw, loan-level servicing tapes.
-
-    Non-Linear Optimization: Uses scipy.optimize.curve_fit to regress In-The-Money (ITM) cohorts into a Sigmoid S-Curve. This discovers the strict asymptotic bounds (Base CPR, Max CPR, and Steepness) driven purely by the macroeconomic interest rate incentive.
-
-2. The Machine Learning Modifier (Behavioral Residuals)
+### 2. The Machine Learning Modifier (Behavioral Residuals)
 
 While the S-Curve provides the macro-anchor, different borrower profiles react to the exact same rate incentive with vastly different efficiencies.
+* **Residual Training:** A Scikit-Learn `RandomForestRegressor` is trained exclusively on the residual errors of the S-Curve.
+* **Loan-Level Covariates:** The model ingests behavioral features such as FICO scores (borrower rationality/efficiency) and Burnout indicators (historical path dependency).
+* **Hybrid Evaluation:** Final Prepayment Speed = S-Curve Base + ML Residual Prediction, bounded strictly between 0% and 100%.
 
-    Residual Training: A Scikit-Learn RandomForestRegressor is trained exclusively on the residual errors of the S-Curve.
+### 3. Dynamic Pricing Context & Convexity
 
-    Loan-Level Covariates: The model ingests behavioral features such as FICO scores (borrower rationality/efficiency) and Burnout indicators (historical path dependency).
+Unlike static discounted cash flow scripts, instruments in this engine natively inherit a dynamic `PricingContext` (`YieldCurve`). When the `ALMEngine` executes a Basel stress test, the curve shift cascades down to the loan level. Mortgages dynamically query the active 10-year rate, pass it to the Hybrid ML model, and adjust their amortization schedules in real-time. This successfully replicates the Negative Convexity inherent in callable asset portfolios.
 
-    Hybrid Evaluation: Final Prepayment Speed = S-Curve Base + ML Residual Prediction, bounded strictly between 0% and 100%.
+---
 
-3. Dynamic Pricing Context & Convexity
+## ⚙️ Technical Setup & Quickstart
 
-Unlike static discounted cash flow scripts, instruments in this engine natively inherit a dynamic PricingContext (YieldCurve). When the ALMEngine executes a Basel stress test, the curve shift cascades down to the loan level. Mortgages dynamically query the active 10-year rate, pass it to the Hybrid ML model, and adjust their amortization schedules in real-time. This successfully replicates the Negative Convexity inherent in callable asset portfolios.
+### Prerequisites
+* Python 3.9+
+* `pip` and `virtualenv`
 
-⚙️ Technical Setup & Quickstart
-Prerequisites
+### Installation
 
-    Python 3.9+
+1. **Clone the repository:**
+```bash
+git clone https://github.com/yourusername/tier1-alm-engine.git
+cd tier1-alm-engine
+```
 
-    pip and virtualenv
+2. **Create and activate a virtual environment:**
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+```
 
-Installation
+3. **Install the quantitative dependencies:**
+```bash
+pip install -r requirements.txt
+```
+*(Note: requirements.txt should include numpy, pandas, scipy, scikit-learn, matplotlib, and pytest)*
 
-    Clone the repository:
-    Bash
-
-    git clone https://github.com/yourusername/tier1-alm-engine.git
-    cd tier1-alm-engine
-
-    Create and activate a virtual environment:
-    Bash
-
-    python -m venv venv
-    source venv/bin/activate  # On Windows use: venv\Scripts\activate
-
-    Install the quantitative dependencies:
-    Bash
-
-    pip install -r requirements.txt
-
-    (Note: requirements.txt should include numpy, pandas, scipy, scikit-learn, matplotlib, and pytest)
-
-Repository Structure
-Plaintext
-
+### Repository Structure
+```text
 tier1-alm-engine/
 ├── notebooks/
 │   └── executive_summary.ipynb       # EVE stress-testing dashboards & S-Curve visualizations
@@ -109,12 +101,12 @@ tier1-alm-engine/
 │       ├── prepayment_calibrator.py  # SciPy/Scikit-Learn two-step calibrator
 │       └── prepayment_model.py       # Stateless Hybrid ML evaluation logic
 └── tests/                            # MRM-compliant unit and integration test suite
+```
 
-Quickstart Execution
-
+### Quickstart Execution
 To run the full end-to-end pipeline—from generating synthetic loan-level servicing tapes to calculating the Economic Value of Equity (EVE) under stress—you can use the following snippet:
-Python
 
+```python
 from src.behavioral_models.base_cpr_calculator import BaseCPRCalculator
 from src.behavioral_models.prepayment_calibrator import HybridPrepaymentCalibrator
 from src.alm_engine.yield_curve import YieldCurve
@@ -141,12 +133,12 @@ portfolio = [
 engine = ALMEngine(portfolio=portfolio, baseline_curve=baseline_curve)
 eve = engine.calculate_eve(baseline_curve)
 print(f"Baseline Economic Value of Equity: ${eve:,.2f}")
+```
 
-Model Risk Management (MRM) Testing
-
+### Model Risk Management (MRM) Testing
 In Tier-1 banking environments, mathematical models must pass rigorous validation. This engine is fully covered by a robust test suite that prevents data leakage and ensures bounded model behavior.
 
 To execute the test suite:
-Bash
-
+```bash
 python -m pytest tests/ -v
+```
