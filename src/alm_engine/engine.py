@@ -20,7 +20,7 @@ class ALMEngine:
         eve = 0.0
 
         for instrument in self.portfolio:
-            cash_flows = instrument.get_cash_flows()
+            cash_flows = instrument.get_cash_flows(active_curve)
             for t, cf in cash_flows.items():
                 discount_factor = active_curve.get_discount_factor(t)
                 eve += cf * discount_factor

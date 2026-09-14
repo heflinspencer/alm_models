@@ -1,0 +1,13 @@
+# Environments
+venv/
+env/
+.env
+
+# Cache and compiled files
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
+
+# OS generated files
+.DS_Store

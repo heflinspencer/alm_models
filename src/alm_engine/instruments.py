@@ -175,14 +175,21 @@ class NonMaturingDeposit(Instrument):
     Cash flows are modeled using a behavioural assumption of annual runoff (decay rate)
     up to a maximum modeling horizon.
     """
-    def __init__(self, notional: float, rate: float, max_maturity: float, decay_rate: float):
+    def __init__(self, notional: float, rate: float, max_maturity: float, decay_rate: float, beta_model=None):
         # Interpret max_maturity as the modeling horizon (e.g., cut off after 10 years)
         super().__init__(notional, rate, max_maturity)
         self.decay_rate = decay_rate
+        self.beta_model = beta_model
     
-    def get_cash_flows(self) -> dict[float, float]:
+    def get_cash_flows(self, yield_curve) -> dict[float, float]:
         periods = int(np.floor(self.maturity))
         cash_flows = {}
+
+        if self.beta_model is not None:
+            current_market_rate = yield_curve.get_rate(0.25)
+            active_rate = self.beta_model.calculate_deposit_rate(self.rate, current_market_rate)
+        else:
+            active_rate = self.rate
 
         if periods  <= 0:
             return {self.maturity: self.notional}
@@ -191,7 +198,7 @@ class NonMaturingDeposit(Instrument):
 
         for t in range(1, periods + 1):
             # Calculate interest paid on the remaining balance
-            interest_payment = remaining_balance * self.rate
+            interest_payment = remaining_balance * active_rate
 
             # Calculate the principal runoff for this period
             if t == periods:
