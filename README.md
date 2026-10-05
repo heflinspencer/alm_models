@@ -1,8 +1,8 @@
-# 🏛️ Quantitative Architecture Summary
+# 🏛️️ Quantitative Architecture Summary
 
 This repository implements a production-grade Asset Liability Management (ALM) engine designed to evaluate Interest Rate Risk in the Banking Book (IRRBB) through the lens of Economic Value of Equity (EVE).
 
-The flagship feature of this engine is the Hybrid Mortgage Prepayment Model, which bridges the gap between traditional deterministic risk frameworks and modern Machine Learning to capture both macro-level structural boundaries and micro-level behavioral nuances.
+The flagship feature of this engine is the dual behavioral modeling framework, which bridges the gap between traditional deterministic risk frameworks and modern statistical methods to capture both asset-side prepayment convexity and liability-side deposit margin compression.
 
 ```mermaid
 flowchart LR
@@ -18,16 +18,18 @@ flowchart LR
         Tape[(Raw Servicing Tape)]:::data --> Calc[BaseCPRCalculator]
         Calc --> SMM[Empirical SMM / CPR]:::data
         Calc --> Cov[Covariates: FICO, Burnout]:::data
+        Hist[(Historical Rate Cycles)]:::data --> OLS[OLS Attenuation Cleaner]:::data
     end
 
-    %% 2. Hybrid Calibration
-    subgraph ML [2. Hybrid Prepayment Calibration]
+    %% 2. Behavioral Calibration
+    subgraph ML [2. Behavioral Calibration]
         direction TB
         SMM --> SCurve[SciPy: S-Curve Anchor]:::model
         SCurve --> Res[Extract Residual Errors]
         SMM --> Res
         Res & Cov --> RF[Scikit-Learn: Random Forest]:::model
         SCurve & RF --> Hybrid((Hybrid Prepayment Model)):::model
+        OLS --> NMDB[Asymmetric NMD Betas]:::model
     end
 
     %% 3. ALM Pricing Engine
@@ -35,15 +37,16 @@ flowchart LR
         direction TB
         YC[Regulatory Rate Shocks]:::data --> Mort[RetailMortgage]:::engine
         Hybrid -. "Passes ML CPR" .-> Mort
-        YC --> Liab[Liabilities & NMDs]:::engine
+        YC --> Liab[NonMaturingDeposit]:::engine
+        NMDB -. "Passes ZLB Deposit Rate" .-> Liab
         Mort & Liab --> AE[ALMEngine]:::engine
         AE --> EVE(((EVE Dashboard))):::output
     end
 ```
 
-### 1. The MRM-Compliant Anchor (Structural S-Curve)
+### 1. The MRM-Compliant Asset Anchor (Structural S-Curve)
 
-Pure Machine Learning models (like raw XGBoost) extrapolate unpredictably under extreme regulatory stress shocks (e.g., +400 bps parallel shifts), often violating Model Risk Management (MRM) standards. To guarantee structural safety, this pipeline features a two-step calibrator:
+Pure Machine Learning models (like raw XGBoost) extrapolate unpredictably under extreme regulatory stress shocks (e.g., +400 bps parallel shifts), often violating Model Risk Management (MRM) standards. To guarantee structural safety, this pipeline features a two-step calibrator for mortgage prepayments:
 * **Empirical Extraction:** Derives assumption-free Single Monthly Mortality (SMM) and baseline Conditional Prepayment Rates (CPR) from raw, loan-level servicing tapes.
 * **Non-Linear Optimization:** Uses `scipy.optimize.curve_fit` to regress In-The-Money (ITM) cohorts into a Sigmoid S-Curve. This discovers the strict asymptotic bounds (Base CPR, Max CPR, and Steepness) driven purely by the macroeconomic interest rate incentive.
 
@@ -54,9 +57,16 @@ While the S-Curve provides the macro-anchor, different borrower profiles react t
 * **Loan-Level Covariates:** The model ingests behavioral features such as FICO scores (borrower rationality/efficiency) and Burnout indicators (historical path dependency).
 * **Hybrid Evaluation:** Final Prepayment Speed = S-Curve Base + ML Residual Prediction, bounded strictly between 0% and 100%.
 
-### 3. Dynamic Pricing Context & Convexity
+### 3. Asymmetric Non-Maturing Deposit (NMD) Betas
 
-Unlike static discounted cash flow scripts, instruments in this engine natively inherit a dynamic `PricingContext` (`YieldCurve`). When the `ALMEngine` executes a Basel stress test, the curve shift cascades down to the loan level. Mortgages dynamically query the active 10-year rate, pass it to the Hybrid ML model, and adjust their amortization schedules in real-time. This successfully replicates the Negative Convexity inherent in callable asset portfolios.
+Traditional models often assume static deposit pricing, hiding severe liquidity risks. This engine models retail deposits as dynamic liabilities:
+* **Asymmetric Pass-Through:** Calibrates distinct "Up-Cycle" and "Down-Cycle" betas using Ordinary Least Squares (OLS) regression to capture the bank's margin-protection behavior.
+* **Attenuation Bias Correction:** Cleans noisy independent variables prior to OLS regression to prevent beta suppression.
+* **Zero Lower Bound (ZLB) Enforcement:** Strictly floors deposit rates during extreme rate cuts, creating the realistic margin-squeeze trap that collapses EVE when paired with asset prepayments.
+
+### 4. Dynamic Pricing Context & Convexity
+
+Unlike static discounted cash flow scripts, instruments in this engine natively inherit a dynamic `PricingContext` (`YieldCurve`). When the `ALMEngine` executes a Basel stress test, the curve shift cascades down to the portfolio level. Mortgages dynamically query the active long-term rate to adjust amortization, while Non-Maturing Deposits query the short-term rate to recalculate interest expense. This fully synthesizes the interacting forces of Negative Convexity and Margin Squeeze.
 
 ---
 
@@ -70,8 +80,8 @@ Unlike static discounted cash flow scripts, instruments in this engine natively 
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/tier1-alm-engine.git
-cd tier1-alm-engine
+git clone https://github.com/heflinspencer/alm_models.git
+cd alm_models
 ```
 
 2. **Create and activate a virtual environment:**
@@ -84,11 +94,12 @@ source venv/bin/activate  # On Windows use: venv\Scripts\activate
 ```bash
 pip install -r requirements.txt
 ```
-*(Note: requirements.txt should include numpy, pandas, scipy, scikit-learn, matplotlib, and pytest)*
 
 ### Repository Structure
 ```text
-tier1-alm-engine/
+alm_models/
+├── .github/workflows/                # CI/CD pipelines
+├── docs/                             # Documentation
 ├── notebooks/
 │   └── executive_summary.ipynb       # EVE stress-testing dashboards & S-Curve visualizations
 ├── src/
@@ -98,9 +109,14 @@ tier1-alm-engine/
 │   │   └── yield_curve.py            # Dynamic pricing context and discount factors
 │   └── behavioral_models/
 │       ├── base_cpr_calculator.py    # ETL pipeline for empirical loan-level SMM
+│       ├── nmd_beta_model.py         # Asymmetric pass-through logic with ZLB enforcement
+│       ├── nmd_calibrator.py         # OLS regression for asymmetric deposit betas
 │       ├── prepayment_calibrator.py  # SciPy/Scikit-Learn two-step calibrator
 │       └── prepayment_model.py       # Stateless Hybrid ML evaluation logic
-└── tests/                            # MRM-compliant unit and integration test suite
+├── tests/                            # MRM-compliant unit and integration test suite
+├── .gitignore
+├── README.md
+└── requirements.txt                  # Quantitative dependencies
 ```
 
 ### Quickstart Execution
